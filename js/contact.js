@@ -16,19 +16,31 @@ const form = document.getElementById("contact-form");
 let turnstileWidgetId = null;
 let turnstileReady = false;
 
-window.onTurnstileReady = () => {
+const renderTurnstile = () => {
+  if (turnstileReady) return;
+
   const host = document.getElementById("turnstile");
   const siteKey = window.SITE_CONFIG?.turnstile?.siteKey;
   if (!host || !siteKey || !window.turnstile) return;
 
-  turnstileWidgetId = window.turnstile.render(host, {
-    sitekey: siteKey,
-    theme: "light",
-    size: "flexible",
-    language: "ko",
-  });
-  turnstileReady = true;
+  try {
+    turnstileWidgetId = window.turnstile.render(host, {
+      sitekey: siteKey,
+      theme: "light",
+      language: "ko",
+    });
+    turnstileReady = turnstileWidgetId !== undefined;
+  } catch (err) {
+    console.error("[turnstile] 위젯을 그리지 못했습니다:", err);
+  }
 };
+
+window.onTurnstileReady = renderTurnstile;
+
+// api.js가 contact.js보다 먼저 실행되면 위 콜백을 놓친다.
+// 이미 로드돼 있으면 직접 그리고, 아니면 DOM 준비 시점에 한 번 더 시도한다.
+if (window.turnstile) renderTurnstile();
+document.addEventListener("DOMContentLoaded", renderTurnstile);
 
 if (form) {
   const statusEl = document.getElementById("form-status");

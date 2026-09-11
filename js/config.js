@@ -12,7 +12,7 @@ window.SITE_CONFIG = {
   endpoint: "/api/contact",
 
   turnstile: {
-    siteKey: "0x4AAAAAAEwSfqW9F8J5K7OV",
+    siteKey: "0x4AAAAAAEwS3xZK27q8Ocrw",
   },
 
   upload: {
