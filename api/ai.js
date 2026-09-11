@@ -12,8 +12,9 @@
 
 const { guard } = require("./_turnstile");
 
-const BUILD = "diag-2";
-const MODEL = "gemini-2.5-flash";
+const BUILD = "diag-3";
+// gemini-2.5-flash는 신규 키로는 더 이상 호출되지 않는다 (404).
+const MODEL = "gemini-3.6-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 const MAX_LEN = { product: 60, feature: 300, target: 60 };
