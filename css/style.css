@@ -598,6 +598,123 @@ h1, h2, h3 { line-height: 1.35; letter-spacing: -0.035em; font-weight: 800; }
   font-variant-numeric: tabular-nums;
 }
 
+.field__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0;
+}
+
+/* 이미지 첨부 */
+.upload {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88px;
+  padding: 18px;
+  text-align: center;
+  background: var(--bg-alt);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: border-color .2s var(--ease), background .2s var(--ease);
+}
+.upload:hover { border-color: var(--accent); background: var(--accent-2); }
+.upload.is-drag {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-2);
+}
+.upload.is-full { opacity: .5; cursor: not-allowed; }
+.upload.is-full:hover { border-color: var(--line); background: var(--bg-alt); }
+
+/* 입력 자체를 영역 전체에 깔아 클릭·드롭을 모두 받는다 */
+.upload input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: inherit;
+}
+.upload__text {
+  font-size: 0.88rem;
+  color: var(--ink-2);
+  line-height: 1.5;
+  pointer-events: none;
+}
+.upload__text strong { color: var(--accent); font-weight: 700; }
+
+/* 선택한 이미지 미리보기 */
+.preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.preview:empty { display: none; }
+
+.preview li {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--bg-alt);
+}
+.preview img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+.preview__name {
+  display: block;
+  padding: 7px 9px;
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(14, 17, 22, .62);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .18s var(--ease);
+}
+.preview__remove:hover { background: rgba(14, 17, 22, .86); }
+
+.upload__progress {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+.upload__progress:not(.is-on) { display: none; }
+.upload__progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width .3s var(--ease);
+}
+
+.turnstile:empty { display: none; }
+.turnstile { min-height: 0; }
+
 /* 동의 체크박스 */
 .check {
   display: flex;

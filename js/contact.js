@@ -1,8 +1,34 @@
 /* =========================================================
-   문의 폼 — Supabase REST API로 직접 전송
-   SDK 없이 fetch만 사용해서 번들·빌드 단계가 필요 없다.
+   문의 폼
+   ---------------------------------------------------------
+   흐름:
+     1) Turnstile 토큰 확보
+     2) /api/contact 로 입력값 + 토큰 전송
+     3) 서버가 검증 후 행을 만들고 업로드용 서명 URL을 돌려준다
+     4) 이미지를 그 URL로 직접 올린다
+
+   이미지는 서버를 거치지 않고 Storage로 바로 간다.
+   서버 함수의 요청 본문 한도(4.5MB)를 넘기지 않기 위해서다.
    ========================================================= */
 const form = document.getElementById("contact-form");
+
+/* Turnstile은 스크립트 로드 시점이 제각각이라 전역 콜백으로 받는다 */
+let turnstileWidgetId = null;
+let turnstileReady = false;
+
+window.onTurnstileReady = () => {
+  const host = document.getElementById("turnstile");
+  const siteKey = window.SITE_CONFIG?.turnstile?.siteKey;
+  if (!host || !siteKey || !window.turnstile) return;
+
+  turnstileWidgetId = window.turnstile.render(host, {
+    sitekey: siteKey,
+    theme: "light",
+    size: "flexible",
+    language: "ko",
+  });
+  turnstileReady = true;
+};
 
 if (form) {
   const statusEl = document.getElementById("form-status");
@@ -11,8 +37,17 @@ if (form) {
   const countEl = document.getElementById("f-count");
   const agreeEl = document.getElementById("f-agree");
 
-  const cfg = window.SUPABASE_CONFIG || {};
-  const isConfigured = Boolean(cfg.url && cfg.anonKey);
+  const uploadEl = document.getElementById("upload");
+  const filesEl = document.getElementById("f-files");
+  const previewEl = document.getElementById("preview");
+  const progressEl = document.getElementById("upload-progress");
+  const progressBar = progressEl.querySelector("i");
+
+  const cfg = window.SITE_CONFIG || {};
+  const up = cfg.upload || {};
+  const MAX_FILES = up.maxFiles || 3;
+  const MAX_BYTES = up.maxFileBytes || 5 * 1024 * 1024;
+  const ALLOWED = up.allowedTypes || ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
   /* 글자 수 표시 ------------------------------------------------------ */
   const updateCount = () => (countEl.textContent = messageEl.value.length);
@@ -41,6 +76,123 @@ if (form) {
     p.className = "field__error";
     p.textContent = message;
     box.appendChild(p);
+  };
+
+  /* =========================================================
+     이미지 첨부
+     ========================================================= */
+  // 선택한 파일을 직접 들고 있는다. input.files는 개별 삭제가 안 되기 때문.
+  let picked = [];
+
+  const prettySize = (bytes) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  };
+
+  const renderPreview = () => {
+    // 이전 미리보기의 objectURL을 해제해 메모리 누수를 막는다
+    previewEl.querySelectorAll("img").forEach((img) => URL.revokeObjectURL(img.src));
+    previewEl.innerHTML = "";
+
+    picked.forEach((file, i) => {
+      const li = document.createElement("li");
+
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(file);
+      img.alt = "";
+
+      const name = document.createElement("span");
+      name.className = "preview__name";
+      name.textContent = `${file.name} · ${prettySize(file.size)}`;
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "preview__remove";
+      btn.textContent = "×";
+      btn.setAttribute("aria-label", `${file.name} 삭제`);
+      btn.addEventListener("click", () => {
+        picked.splice(i, 1);
+        renderPreview();
+      });
+
+      li.append(img, name, btn);
+      previewEl.appendChild(li);
+    });
+
+    const full = picked.length >= MAX_FILES;
+    uploadEl.classList.toggle("is-full", full);
+    filesEl.disabled = full;
+    uploadEl.querySelector(".upload__text").innerHTML = full
+      ? `이미지 ${MAX_FILES}장을 모두 선택했습니다`
+      : `<strong>클릭해서 선택</strong>하거나 이미지를 끌어다 놓으세요`;
+  };
+
+  const addFiles = (list) => {
+    const rejected = [];
+
+    for (const file of list) {
+      if (picked.length >= MAX_FILES) {
+        rejected.push(`최대 ${MAX_FILES}장까지 첨부할 수 있습니다.`);
+        break;
+      }
+      if (!ALLOWED.includes(file.type)) {
+        rejected.push(`${file.name} — 이미지 파일만 첨부할 수 있습니다.`);
+        continue;
+      }
+      if (file.size > MAX_BYTES) {
+        rejected.push(`${file.name} — 장당 ${prettySize(MAX_BYTES)}까지 가능합니다.`);
+        continue;
+      }
+      // 같은 파일을 두 번 고른 경우 걸러낸다
+      if (picked.some((f) => f.name === file.name && f.size === file.size)) continue;
+
+      picked.push(file);
+    }
+
+    renderPreview();
+    if (rejected.length) setStatus(rejected[0], "bad");
+    else if (statusEl.classList.contains("is-bad")) setStatus("", null);
+  };
+
+  filesEl.addEventListener("change", () => {
+    addFiles(filesEl.files);
+    filesEl.value = ""; // 같은 파일을 다시 고를 수 있도록 비운다
+  });
+
+  ["dragenter", "dragover"].forEach((ev) =>
+    uploadEl.addEventListener(ev, (e) => {
+      e.preventDefault();
+      if (picked.length < MAX_FILES) uploadEl.classList.add("is-drag");
+    })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    uploadEl.addEventListener(ev, () => uploadEl.classList.remove("is-drag"))
+  );
+  uploadEl.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files);
+  });
+
+  /* 업로드 진행 표시 --------------------------------------------------- */
+  const setProgress = (done, total) => {
+    progressEl.classList.toggle("is-on", total > 0 && done < total);
+    progressBar.style.width = total ? `${(done / total) * 100}%` : "0";
+  };
+
+  /* 서명 URL로 직접 업로드 -------------------------------------------- */
+  const uploadAll = async (uploads) => {
+    setProgress(0, uploads.length);
+
+    for (let i = 0; i < uploads.length; i++) {
+      const res = await fetch(uploads[i].url, {
+        method: "PUT",
+        headers: { "Content-Type": picked[i].type },
+        body: picked[i],
+      });
+      if (!res.ok) throw new Error(`upload ${res.status} ${await res.text()}`);
+      setProgress(i + 1, uploads.length);
+    }
   };
 
   /* 검증 -------------------------------------------------------------- */
@@ -96,9 +248,12 @@ if (form) {
       return;
     }
 
-    if (!isConfigured) {
-      setStatus("문의 접수 준비 중입니다. 잠시 후 다시 시도해 주세요.", "bad");
-      console.warn("[contact] Supabase가 설정되지 않았습니다. js/config.js를 확인하세요.");
+    const turnstileToken = turnstileReady && window.turnstile
+      ? window.turnstile.getResponse(turnstileWidgetId)
+      : "";
+
+    if (!turnstileToken) {
+      setStatus("자동 입력 방지 확인이 끝나지 않았습니다. 잠시 후 다시 눌러주세요.", "bad");
       return;
     }
 
@@ -106,29 +261,42 @@ if (form) {
     submitEl.textContent = "보내는 중...";
 
     try {
-      const res = await fetch(`${cfg.url}/rest/v1/${cfg.table}`, {
+      const res = await fetch(cfg.endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: cfg.anonKey,
-          Authorization: `Bearer ${cfg.anonKey}`,
-          Prefer: "return=minimal",
-        },
-        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          turnstileToken,
+          files: picked.map((f) => ({ type: f.type, size: f.size })),
+        }),
       });
 
-      if (!res.ok) {
-        const detail = await res.text();
-        throw new Error(`${res.status} ${detail}`);
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || `submit ${res.status}`);
+
+      if (result.uploads?.length) {
+        submitEl.textContent = "이미지 올리는 중...";
+        await uploadAll(result.uploads);
       }
 
       form.reset();
+      picked = [];
+      renderPreview();
+      setProgress(0, 0);
       updateCount();
       setStatus("문의가 접수되었습니다. 확인 후 회신드리겠습니다.", "ok");
     } catch (err) {
       console.error("[contact]", err);
-      setStatus("전송에 실패했습니다. 잠시 후 다시 시도해 주세요.", "bad");
+      setProgress(0, 0);
+      setStatus(
+        String(err.message).startsWith("upload")
+          ? "문의는 접수됐지만 이미지 업로드에 실패했습니다. 필요하면 다시 보내주세요."
+          : err.message || "전송에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        "bad"
+      );
     } finally {
+      // 토큰은 1회용이라 매번 새로 받아야 한다
+      if (turnstileReady && window.turnstile) window.turnstile.reset(turnstileWidgetId);
       submitEl.disabled = false;
       submitEl.textContent = "문의 보내기";
     }
@@ -142,4 +310,6 @@ if (form) {
     const msg = box.querySelector(".field__error");
     if (msg) msg.remove();
   });
+
+  renderPreview();
 }

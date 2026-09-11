@@ -279,6 +279,24 @@
             <span class="field__count"><span id="f-count">0</span>/1000</span>
           </div>
 
+          <div class="field">
+            <label for="f-files">
+              이미지 첨부
+              <small class="field__hint">선택 · 최대 3장 · 장당 5MB · JPG, PNG, WEBP, GIF</small>
+            </label>
+
+            <div class="upload" id="upload">
+              <input type="file" id="f-files" name="files" multiple
+                     accept="image/jpeg,image/png,image/webp,image/gif">
+              <span class="upload__text">
+                <strong>클릭해서 선택</strong>하거나 이미지를 끌어다 놓으세요
+              </span>
+            </div>
+
+            <ul class="preview" id="preview"></ul>
+            <div class="upload__progress" id="upload-progress" aria-hidden="true"><i></i></div>
+          </div>
+
           <label class="check">
             <input type="checkbox" id="f-agree" name="agree" required>
             <span>
@@ -292,6 +310,9 @@
             <label for="f-company">회사명</label>
             <input type="text" id="f-company" name="company" tabindex="-1" autocomplete="off">
           </div>
+
+          <!-- Cloudflare Turnstile — 대개 클릭 없이 자동 통과한다 -->
+          <div class="turnstile" id="turnstile"></div>
 
           <button class="btn btn--primary form__submit" type="submit" id="f-submit">
             문의 보내기
@@ -318,6 +339,7 @@
 
 <script src="js/config.js"></script>
 <script src="js/main.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit" async defer></script>
 <script src="js/contact.js"></script>
 </body>
 </html>
