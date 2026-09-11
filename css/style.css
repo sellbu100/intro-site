@@ -484,6 +484,186 @@ h1, h2, h3 { line-height: 1.35; letter-spacing: -0.035em; font-weight: 800; }
 }
 
 /* =========================================================
+   Contact
+   ========================================================= */
+.contact {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(36px, 6vw, 72px);
+  align-items: start;
+}
+.contact__intro .head__title { margin-bottom: 18px; }
+
+.contact__note {
+  margin-top: 22px;
+  display: grid;
+  gap: 8px;
+}
+.contact__note li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 0.88rem;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
+.contact__note li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+/* form */
+.form {
+  display: grid;
+  gap: 18px;
+  padding: clamp(24px, 3.4vw, 34px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.field { display: grid; gap: 8px; position: relative; }
+.field label {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.field label span { color: var(--accent); }
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  transition: border-color .2s var(--ease), box-shadow .2s var(--ease), background .2s var(--ease);
+}
+.field textarea { resize: vertical; min-height: 118px; }
+
+.field input::placeholder,
+.field textarea::placeholder { color: var(--ink-3); }
+
+.field input:hover,
+.field select:hover,
+.field textarea:hover { border-color: var(--ink-3); }
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-2);
+}
+
+.field select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%238b93a1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 38px;
+  cursor: pointer;
+}
+
+/* 오류 상태 */
+.field.is-error input,
+.field.is-error select,
+.field.is-error textarea { border-color: #d93a3a; }
+.field.is-error input:focus,
+.field.is-error textarea:focus { box-shadow: 0 0 0 3px rgba(217, 58, 58, .12); }
+
+.field__error {
+  font-size: 0.8rem;
+  color: #d93a3a;
+  font-weight: 500;
+}
+
+.field__count {
+  position: absolute;
+  right: 2px;
+  top: 0;
+  font-size: 0.76rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 동의 체크박스 */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--bg-alt);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: border-color .2s var(--ease);
+}
+.check.is-error { border-color: #d93a3a; }
+.check input {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 3px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.check span {
+  font-size: 0.86rem;
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+.check strong { font-weight: 700; color: var(--ink); }
+.check small {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.76rem;
+  color: var(--ink-3);
+}
+
+/* 봇 트랩 — 화면에서 숨김 */
+.hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.form__submit {
+  width: 100%;
+  margin-top: 2px;
+}
+.form__submit:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.form__status {
+  margin: -4px 0 0;
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1.6;
+  text-align: center;
+  min-height: 1.6em;
+}
+.form__status.is-ok { color: #157a4a; }
+.form__status.is-bad { color: #d93a3a; }
+
+/* =========================================================
    Footer
    ========================================================= */
 .footer {
@@ -508,7 +688,7 @@ h1, h2, h3 { line-height: 1.35; letter-spacing: -0.035em; font-weight: 800; }
    Responsive
    ========================================================= */
 @media (max-width: 900px) {
-  .about, .class { grid-template-columns: 1fr; }
+  .about, .class, .contact { grid-template-columns: 1fr; }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 20px; }
   .step::before { display: none; }
   .step { padding-top: 28px; }
@@ -529,7 +709,9 @@ h1, h2, h3 { line-height: 1.35; letter-spacing: -0.035em; font-weight: 800; }
 
 @media (max-width: 560px) {
   .steps { grid-template-columns: 1fr; gap: 22px; }
+  /* 폭이 좁을 때 '프로세스' 메뉴를 접어 나머지 메뉴를 살린다 */
   .nav__menu a:nth-child(3) { display: none; }
+  .nav__menu a { padding: 7px 8px; font-size: 0.82rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
