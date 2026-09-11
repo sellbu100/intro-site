@@ -12,7 +12,7 @@
 
 const { guard } = require("./_turnstile");
 
-const BUILD = "diag-3";
+const BUILD = "diag-4";
 // gemini-2.5-flash는 신규 키로는 더 이상 호출되지 않는다 (404).
 const MODEL = "gemini-3.6-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
@@ -109,7 +109,9 @@ module.exports = async (req, res) => {
         contents: [{ role: "user", parts: [{ text: userPrompt }] }],
         generationConfig: {
           temperature: 0.9,
-          maxOutputTokens: 2048,
+          // Gemini 3 계열은 추론 토큰도 이 예산에서 차감한다.
+          // 2048로는 추론만 하다 끝나 본문이 비어 오는 일이 생긴다.
+          maxOutputTokens: 8192,
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
         },
@@ -141,17 +143,55 @@ module.exports = async (req, res) => {
     }
 
     const data = await upstream.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const candidate = data?.candidates?.[0];
+    const parts = candidate?.content?.parts || [];
+
+    // Gemini 3 계열은 추론 결과를 thought 파트로 함께 보낸다.
+    // parts[0]만 읽으면 엉뚱한 조각을 잡으므로, 실제 답변 파트만 모아 잇는다.
+    const text = parts
+      .filter((p) => typeof p.text === "string" && p.thought !== true)
+      .map((p) => p.text)
+      .join("")
+      .trim();
 
     if (!text) {
-      // 안전 필터에 걸리면 candidates가 비어 온다
-      console.error("[ai] 빈 응답:", JSON.stringify(data).slice(0, 400));
-      return res.status(502).json({ error: "결과를 만들지 못했습니다. 입력을 조금 바꿔서 다시 시도해 주세요." });
+      // 안전 필터에 걸리거나, 추론이 출력 예산을 다 쓰면 여기로 온다
+      console.error("[ai] 빈 응답:", JSON.stringify(data).slice(0, 600));
+      return res.status(502).json({
+        error: "결과를 만들지 못했습니다. 입력을 조금 바꿔서 다시 시도해 주세요.",
+        debug: `empty text · finishReason=${candidate?.finishReason} · parts=${parts.length}`,
+      });
     }
 
-    return res.status(200).json(JSON.parse(text));
+    // responseSchema를 줘도 코드펜스를 붙여 오는 경우가 있다
+    const cleaned = text
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      // 앞뒤에 설명이 붙은 경우 첫 JSON 덩어리만 떼어 본다
+      const start = cleaned.indexOf("{");
+      const end = cleaned.lastIndexOf("}");
+      if (start === -1 || end <= start) {
+        console.error("[ai] JSON 아님:", cleaned.slice(0, 400));
+        return res.status(502).json({
+          error: "결과를 해석하지 못했습니다. 다시 시도해 주세요.",
+          debug: `parse failed · finishReason=${candidate?.finishReason} · head=${cleaned.slice(0, 120)}`,
+        });
+      }
+      parsed = JSON.parse(cleaned.slice(start, end + 1));
+    }
+
+    return res.status(200).json(parsed);
   } catch (err) {
     console.error("[ai]", err);
-    return res.status(500).json({ error: "처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요." });
+    return res.status(500).json({
+      error: "처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+      debug: `${err.name}: ${String(err.message).slice(0, 180)}`,
+    });
   }
 };
