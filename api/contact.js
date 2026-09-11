@@ -12,6 +12,8 @@
    Vercel 환경변수로만 주입받는다.
    ========================================================= */
 
+const { guard } = require("./_turnstile");
+
 const MAX_FILES = 3;
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_TYPES = {
@@ -22,24 +24,6 @@ const ALLOWED_TYPES = {
 };
 const ALLOWED_TYPE_VALUES = ["강의", "소싱", "제휴", "기타"];
 const BUCKET = "contact-uploads";
-
-/* Turnstile 검증 ------------------------------------------------------ */
-async function verifyTurnstile(token, ip) {
-  const body = new URLSearchParams();
-  body.append("secret", process.env.TURNSTILE_SECRET_KEY);
-  body.append("response", token);
-  if (ip) body.append("remoteip", ip);
-
-  const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    body,
-  });
-
-  if (!res.ok) return { ok: false, reason: `siteverify ${res.status}` };
-
-  const data = await res.json();
-  return { ok: data.success === true, reason: (data["error-codes"] || []).join(",") };
-}
 
 /* 입력 검증 ----------------------------------------------------------- */
 function validate(payload) {
@@ -103,15 +87,8 @@ module.exports = async (req, res) => {
   const payload = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
 
   /* 1. 캡차 ---------------------------------------------------------- */
-  const token = payload.turnstileToken;
-  if (!token) return res.status(400).json({ error: "자동 입력 방지 확인이 필요합니다." });
-
-  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  const captcha = await verifyTurnstile(token, ip);
-  if (!captcha.ok) {
-    console.warn("[contact] turnstile 실패:", captcha.reason);
-    return res.status(403).json({ error: "자동 입력 방지 확인에 실패했습니다. 다시 시도해 주세요." });
-  }
+  const blocked = await guard(req, payload.turnstileToken);
+  if (blocked) return res.status(blocked.status).json({ error: blocked.error });
 
   /* 2. 입력값 -------------------------------------------------------- */
   const { data, files, error } = validate(payload);

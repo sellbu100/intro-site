@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 쿠팡 상품명 생성기 | 이커머스 셀러</title>
+  <meta name="description" content="상품 정보를 넣으면 쿠팡 검색에 맞춘 상품명과 연관 키워드를 만들어 드립니다. 무료.">
+  <meta name="theme-color" content="#ffffff">
+  <meta property="og:title" content="AI 쿠팡 상품명 생성기">
+  <meta property="og:description" content="쿠팡 검색 최적화 상품명을 무료로 만들어 보세요.">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<a class="skip" href="#main">본문 바로가기</a>
+
+<header class="nav is-scrolled" id="nav">
+  <div class="wrap nav__inner">
+    <a class="logo" href="index.html" aria-label="홈으로">
+      <span class="logo__mark" aria-hidden="true"></span>
+      <span class="logo__text">SELLER</span>
+    </a>
+
+    <nav class="nav__menu" aria-label="주요 메뉴">
+      <a href="index.html#about">소개</a>
+      <a href="index.html#business">사업 영역</a>
+      <a href="index.html#class">강의</a>
+      <a href="index.html#contact">문의</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="section tool">
+    <div class="wrap">
+      <header class="head">
+        <p class="head__label reveal">AI TOOL</p>
+        <h1 class="head__title reveal">쿠팡 상품명<br>만들어 드립니다</h1>
+        <p class="head__desc reveal">
+          상품 정보를 넣으면 검색 노출을 노린 상품명 5개와 연관 키워드를 뽑아드립니다.
+          무료이고, 입력한 내용은 저장하지 않습니다.
+        </p>
+      </header>
+
+      <div class="tool__grid">
+        <form class="form reveal" id="ai-form" novalidate>
+          <div class="field">
+            <label for="a-product">어떤 상품인가요? <span aria-hidden="true">*</span></label>
+            <input type="text" id="a-product" required maxlength="60"
+                   placeholder="예: 스테인리스 텀블러 500ml">
+          </div>
+
+          <div class="field">
+            <label for="a-feature">
+              특징
+              <small class="field__hint">선택 · 재질, 규격, 구성, 차별점 등</small>
+            </label>
+            <textarea id="a-feature" rows="4" maxlength="300"
+                      placeholder="예: 이중 진공, 6시간 보온, 뚜껑 분리 세척 가능, 3색 구성"></textarea>
+            <span class="field__count"><span id="a-count">0</span>/300</span>
+          </div>
+
+          <div class="field">
+            <label for="a-target">
+              타겟 고객
+              <small class="field__hint">선택</small>
+            </label>
+            <input type="text" id="a-target" maxlength="60"
+                   placeholder="예: 사무실에서 쓰는 30대 직장인">
+          </div>
+
+          <div class="turnstile" id="turnstile-box"></div>
+
+          <button class="btn btn--primary form__submit" type="submit" id="a-submit">
+            상품명 만들기
+          </button>
+
+          <p class="form__status" id="ai-status" role="status" aria-live="polite"></p>
+        </form>
+
+        <div class="tool__out" id="ai-out">
+          <div class="tool__empty" id="ai-empty">
+            <p class="tool__empty-title">아직 결과가 없습니다</p>
+            <p class="tool__empty-desc">
+              왼쪽에 상품 정보를 넣고 버튼을 눌러보세요.<br>
+              보통 5초 안에 나옵니다.
+            </p>
+          </div>
+
+          <div class="result" id="ai-result" hidden>
+            <section class="result__block">
+              <h2 class="result__title">상품명 후보</h2>
+              <ol class="titles" id="r-titles"></ol>
+            </section>
+
+            <section class="result__block">
+              <h2 class="result__title">연관 키워드</h2>
+              <ul class="chips" id="r-keywords"></ul>
+            </section>
+
+            <section class="result__block">
+              <h2 class="result__title">주의할 점</h2>
+              <ul class="tips" id="r-tips"></ul>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <p class="tool__note reveal">
+        AI가 만든 결과입니다. 그대로 쓰기보다 상품에 맞게 다듬어 쓰세요.
+        효능·성능 표현은 실제와 다르면 제재 대상이 될 수 있으니 꼭 확인하시고요.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer__inner">
+    <a class="logo" href="index.html">
+      <span class="logo__mark" aria-hidden="true"></span>
+      <span class="logo__text">SELLER</span>
+    </a>
+    <p class="footer__desc">3년차 이커머스 셀러 · 쿠팡 로켓 / 로켓그로스 운영 · 중국 사입</p>
+    <small class="footer__copy">&copy; <span id="year"></span> All rights reserved.</small>
+  </div>
+</footer>
+
+<script src="js/config.js"></script>
+<script src="js/main.js"></script>
+<script src="js/turnstile.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit" async defer></script>
+<script src="js/ai.js"></script>
+</body>
+</html>

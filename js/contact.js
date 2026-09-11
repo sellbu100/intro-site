@@ -12,39 +12,6 @@
    ========================================================= */
 const form = document.getElementById("contact-form");
 
-/* Turnstile은 스크립트 로드 시점이 제각각이라 전역 콜백으로 받는다 */
-let turnstileWidgetId = null;
-let turnstileReady = false;
-
-const renderTurnstile = () => {
-  if (turnstileReady) return;
-
-  // 위젯을 담는 div의 id는 "turnstile"이면 안 된다.
-  // id가 있는 요소는 같은 이름의 전역으로 노출되어 window.turnstile
-  // (Cloudflare API)을 가려버린다. 그래서 turnstile-box를 쓴다.
-  const host = document.getElementById("turnstile-box");
-  const siteKey = window.SITE_CONFIG?.turnstile?.siteKey;
-  if (!host || !siteKey || typeof window.turnstile?.render !== "function") return;
-
-  try {
-    turnstileWidgetId = window.turnstile.render(host, {
-      sitekey: siteKey,
-      theme: "light",
-      language: "ko",
-    });
-    turnstileReady = turnstileWidgetId !== undefined;
-  } catch (err) {
-    console.error("[turnstile] 위젯을 그리지 못했습니다:", err);
-  }
-};
-
-window.onTurnstileReady = renderTurnstile;
-
-// api.js가 contact.js보다 먼저 실행되면 위 콜백을 놓친다.
-// 이미 로드돼 있으면 직접 그리고, 아니면 DOM 준비 시점에 한 번 더 시도한다.
-renderTurnstile();
-document.addEventListener("DOMContentLoaded", renderTurnstile);
-
 if (form) {
   const statusEl = document.getElementById("form-status");
   const submitEl = document.getElementById("f-submit");
@@ -263,9 +230,7 @@ if (form) {
       return;
     }
 
-    const turnstileToken = turnstileReady && window.turnstile
-      ? window.turnstile.getResponse(turnstileWidgetId)
-      : "";
+    const turnstileToken = window.TurnstileWidget.getToken();
 
     if (!turnstileToken) {
       setStatus("자동 입력 방지 확인이 끝나지 않았습니다. 잠시 후 다시 눌러주세요.", "bad");
@@ -310,8 +275,7 @@ if (form) {
         "bad"
       );
     } finally {
-      // 토큰은 1회용이라 매번 새로 받아야 한다
-      if (turnstileReady && window.turnstile) window.turnstile.reset(turnstileWidgetId);
+      window.TurnstileWidget.reset();
       submitEl.disabled = false;
       submitEl.textContent = "문의 보내기";
     }
