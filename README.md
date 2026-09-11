@@ -2,6 +2,8 @@
 
 회사/개인 소개 웹사이트 프로젝트.
 
+**배포 주소:** https://intro-site-eta.vercel.app
+
 ## 폴더 구조
 
 ```
@@ -19,9 +21,9 @@ intro-site/
 - [x] ① 프로젝트 폴더 생성
 - [x] ② 웹사이트 제작
 - [x] ③ 로컬에서 사이트 확인
-- [ ] ④ GitHub 저장소 생성
-- [ ] ⑤ GitHub에 업로드
-- [ ] ⑥ Vercel 연결 + 배포
+- [x] ④ GitHub 저장소 생성
+- [x] ⑤ GitHub에 업로드
+- [x] ⑥ Vercel 연결 + 배포
 - [ ] ⑦ Supabase 연결 (필요시)
 - [ ] ⑧ 이미지 Storage 연결 (필요시)
 - [ ] ⑨ API 연결 (필요시)
