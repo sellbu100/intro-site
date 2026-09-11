@@ -12,21 +12,23 @@
 
 const { guard } = require("./_turnstile");
 
-const BUILD = "diag-5";
-// gemini-2.5-flash는 신규 키로는 더 이상 호출되지 않는다 (404).
-const MODEL = "gemini-3.6-flash";
+const BUILD = "diag-6";
 const API_ROOT = "https://generativelanguage.googleapis.com/v1beta";
-const ENDPOINT = `${API_ROOT}/models/${MODEL}:generateContent`;
+
+// gemini-2.5-flash는 신규 키로 404가 난다. 3.6-flash가 기본이고,
+// 혼잡(503)이 이어지면 아래 순서로 넘어간다. 전부 이 키로 호출 가능한 모델이다.
+const MODELS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+const MODEL = MODELS[0];
 
 // 과부하(503)와 속도 제한(429)은 잠시 뒤면 대개 풀린다.
 // 방문자에게 "나중에 다시"라고 떠넘기는 대신 서버에서 한 번 더 시도한다.
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
-const RETRY_DELAYS = [700, 1800]; // 최대 2회 재시도
-const ATTEMPT_TIMEOUT = 9000;
+const RETRY_DELAYS = [600, 1500];
+const ATTEMPT_TIMEOUT = 8000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function callGemini(body) {
+async function tryModel(model, body) {
   let last = { status: 0, text: "" };
 
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
@@ -36,7 +38,7 @@ async function callGemini(body) {
     const timer = setTimeout(() => ac.abort(), ATTEMPT_TIMEOUT);
 
     try {
-      const res = await fetch(ENDPOINT, {
+      const res = await fetch(`${API_ROOT}/models/${model}:generateContent`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -46,22 +48,38 @@ async function callGemini(body) {
         signal: ac.signal,
       });
 
-      if (res.ok) return { ok: true, res };
+      if (res.ok) return { ok: true, res, model };
 
       const text = await res.text();
       last = { status: res.status, text };
-      console.warn(`[ai] 시도 ${attempt + 1} 실패: ${res.status}`);
+      console.warn(`[ai] ${model} 시도 ${attempt + 1}: ${res.status}`);
 
       if (!RETRY_STATUS.has(res.status)) break;
     } catch (err) {
       last = { status: 0, text: err.name === "AbortError" ? "timeout" : String(err.message) };
-      console.warn(`[ai] 시도 ${attempt + 1} 예외:`, last.text);
+      console.warn(`[ai] ${model} 시도 ${attempt + 1} 예외:`, last.text);
     } finally {
       clearTimeout(timer);
     }
   }
 
-  return { ok: false, ...last };
+  return { ok: false, model, ...last };
+}
+
+async function callGemini(body) {
+  let last = { ok: false, status: 0, text: "", model: MODEL };
+
+  for (const model of MODELS) {
+    const result = await tryModel(model, body);
+    if (result.ok) return result;
+
+    last = result;
+    // 모델 자체의 문제(잘못된 요청·권한)라면 다른 모델도 마찬가지다
+    if (!RETRY_STATUS.has(result.status)) break;
+    console.warn(`[ai] ${model} 포기, 다음 모델로`);
+  }
+
+  return last;
 }
 
 const MAX_LEN = { product: 60, feature: 300, target: 60 };
@@ -194,9 +212,11 @@ module.exports = async (req, res) => {
 
       return res.status(502).json({
         error: msg,
-        debug: `gemini ${call.status}: ${reason}`.slice(0, 300),
+        debug: `gemini ${call.status} (${call.model}): ${reason}`.slice(0, 300),
       });
     }
+
+    console.log(`[ai] ${call.model} 응답 성공`);
 
     const data = await call.res.json();
     const candidate = data?.candidates?.[0];
