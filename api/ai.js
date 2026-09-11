@@ -12,10 +12,57 @@
 
 const { guard } = require("./_turnstile");
 
-const BUILD = "diag-4";
+const BUILD = "diag-5";
 // gemini-2.5-flash는 신규 키로는 더 이상 호출되지 않는다 (404).
 const MODEL = "gemini-3.6-flash";
-const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+const API_ROOT = "https://generativelanguage.googleapis.com/v1beta";
+const ENDPOINT = `${API_ROOT}/models/${MODEL}:generateContent`;
+
+// 과부하(503)와 속도 제한(429)은 잠시 뒤면 대개 풀린다.
+// 방문자에게 "나중에 다시"라고 떠넘기는 대신 서버에서 한 번 더 시도한다.
+const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+const RETRY_DELAYS = [700, 1800]; // 최대 2회 재시도
+const ATTEMPT_TIMEOUT = 9000;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function callGemini(body) {
+  let last = { status: 0, text: "" };
+
+  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+    if (attempt > 0) await sleep(RETRY_DELAYS[attempt - 1]);
+
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), ATTEMPT_TIMEOUT);
+
+    try {
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": process.env.GEMINI_API_KEY,
+        },
+        body: JSON.stringify(body),
+        signal: ac.signal,
+      });
+
+      if (res.ok) return { ok: true, res };
+
+      const text = await res.text();
+      last = { status: res.status, text };
+      console.warn(`[ai] 시도 ${attempt + 1} 실패: ${res.status}`);
+
+      if (!RETRY_STATUS.has(res.status)) break;
+    } catch (err) {
+      last = { status: 0, text: err.name === "AbortError" ? "timeout" : String(err.message) };
+      console.warn(`[ai] 시도 ${attempt + 1} 예외:`, last.text);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return { ok: false, ...last };
+}
 
 const MAX_LEN = { product: 60, feature: 300, target: 60 };
 
@@ -72,7 +119,22 @@ module.exports = async (req, res) => {
 
   // 배포된 함수가 어느 버전인지 확인용. 비밀값은 담지 않는다. 진단 끝나면 제거.
   if (payload.probe === true) {
-    return res.status(200).json({ build: BUILD, model: MODEL });
+    if (payload.models !== true) {
+      return res.status(200).json({ build: BUILD, model: MODEL });
+    }
+    // 이 키로 쓸 수 있는 모델을 확인한다. 대체 모델을 고르기 위한 진단.
+    try {
+      const list = await fetch(`${API_ROOT}/models?pageSize=100`, {
+        headers: { "x-goog-api-key": process.env.GEMINI_API_KEY },
+      });
+      const body = await list.json();
+      const names = (body.models || [])
+        .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+        .map((m) => m.name.replace("models/", ""));
+      return res.status(200).json({ build: BUILD, model: MODEL, available: names });
+    } catch (err) {
+      return res.status(200).json({ build: BUILD, model: MODEL, listError: String(err.message) });
+    }
   }
 
   /* 캡차 ------------------------------------------------------------- */
@@ -98,51 +160,45 @@ module.exports = async (req, res) => {
     .join("\n");
 
   try {
-    const upstream = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": process.env.GEMINI_API_KEY,
+    const call = await callGemini({
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        temperature: 0.9,
+        // Gemini 3 계열은 추론 토큰도 이 예산에서 차감한다.
+        // 2048로는 추론만 하다 끝나 본문이 비어 오는 일이 생긴다.
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+        responseSchema: RESPONSE_SCHEMA,
       },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          temperature: 0.9,
-          // Gemini 3 계열은 추론 토큰도 이 예산에서 차감한다.
-          // 2048로는 추론만 하다 끝나 본문이 비어 오는 일이 생긴다.
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
     });
 
-    if (!upstream.ok) {
-      const detail = await upstream.text();
-      console.error("[ai] gemini", upstream.status, detail.slice(0, 500));
+    if (!call.ok) {
+      console.error("[ai] gemini 최종 실패", call.status, call.text.slice(0, 500));
 
-      const msg = upstream.status === 429
-        ? "요청이 많습니다. 잠시 후 다시 시도해 주세요."
-        : "생성에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+      const msg =
+        call.status === 503 || call.status === 0
+          ? "AI 서버가 혼잡합니다. 30초쯤 뒤에 다시 눌러주세요."
+          : call.status === 429
+          ? "오늘 사용량을 모두 썼습니다. 내일 다시 이용해 주세요."
+          : "생성에 실패했습니다. 잠시 후 다시 시도해 주세요.";
 
-      // 진단용. Google이 돌려주는 error.message에는 키가 포함되지 않는다
-      // (키는 헤더로만 보내고 응답에 echo되지 않는다).
-      // 원인 확인 후 제거할 것.
+      // 진단용. Google의 error.message에는 키가 포함되지 않는다
+      // (키는 헤더로만 보내고 응답에 echo되지 않는다). 확인 후 제거할 것.
       let reason = "";
       try {
-        reason = JSON.parse(detail)?.error?.message || "";
+        reason = JSON.parse(call.text)?.error?.message || "";
       } catch {
-        reason = detail.slice(0, 200);
+        reason = call.text.slice(0, 200);
       }
 
       return res.status(502).json({
         error: msg,
-        debug: `gemini ${upstream.status}: ${reason}`.slice(0, 300),
+        debug: `gemini ${call.status}: ${reason}`.slice(0, 300),
       });
     }
 
-    const data = await upstream.json();
+    const data = await call.res.json();
     const candidate = data?.candidates?.[0];
     const parts = candidate?.content?.parts || [];
 
