@@ -19,9 +19,12 @@ let turnstileReady = false;
 const renderTurnstile = () => {
   if (turnstileReady) return;
 
-  const host = document.getElementById("turnstile");
+  // 위젯을 담는 div의 id는 "turnstile"이면 안 된다.
+  // id가 있는 요소는 같은 이름의 전역으로 노출되어 window.turnstile
+  // (Cloudflare API)을 가려버린다. 그래서 turnstile-box를 쓴다.
+  const host = document.getElementById("turnstile-box");
   const siteKey = window.SITE_CONFIG?.turnstile?.siteKey;
-  if (!host || !siteKey || !window.turnstile) return;
+  if (!host || !siteKey || typeof window.turnstile?.render !== "function") return;
 
   try {
     turnstileWidgetId = window.turnstile.render(host, {
@@ -39,7 +42,7 @@ window.onTurnstileReady = renderTurnstile;
 
 // api.js가 contact.js보다 먼저 실행되면 위 콜백을 놓친다.
 // 이미 로드돼 있으면 직접 그리고, 아니면 DOM 준비 시점에 한 번 더 시도한다.
-if (window.turnstile) renderTurnstile();
+renderTurnstile();
 document.addEventListener("DOMContentLoaded", renderTurnstile);
 
 if (form) {
