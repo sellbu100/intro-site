@@ -11,7 +11,7 @@
    ⚠️ service_role key는 절대 여기에 넣지 마세요. (서버 전용)
    ========================================================= */
 window.SUPABASE_CONFIG = {
-  url: "",
-  anonKey: "",
+  url: "https://uwovwdwrcvspcumlslov.supabase.co",
+  anonKey: "sb_publishable_tp8CyF0eASFLX1tLZltVyQ_zn-3dsMX",
   table: "contacts",
 };
