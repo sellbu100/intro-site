@@ -12,7 +12,7 @@
 
 const { guard } = require("./_turnstile");
 
-const BUILD = "diag-6";
+const BUILD = "diag-7";
 const API_ROOT = "https://generativelanguage.googleapis.com/v1beta";
 
 // gemini-2.5-flash는 신규 키로 404가 난다. 3.6-flash가 기본이고,
@@ -21,21 +21,27 @@ const MODELS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest"];
 const MODEL = MODELS[0];
 
 // 과부하(503)와 속도 제한(429)은 잠시 뒤면 대개 풀린다.
-// 방문자에게 "나중에 다시"라고 떠넘기는 대신 서버에서 한 번 더 시도한다.
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
-const RETRY_DELAYS = [600, 1500];
-const ATTEMPT_TIMEOUT = 8000;
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// 재시도는 반드시 전체 예산 안에서 이뤄져야 한다.
+// 이걸 넘기면 Vercel이 함수를 끊어버려 504가 나가고, 그러면
+// 우리가 준비한 오류 메시지조차 방문자에게 닿지 않는다.
+const TOTAL_BUDGET = 22000;
+const ATTEMPT_TIMEOUT = 9000;
 
-async function tryModel(model, body) {
-  let last = { status: 0, text: "" };
+async function callGemini(body) {
+  const deadline = Date.now() + TOTAL_BUDGET;
+  let last = { ok: false, status: 0, text: "", model: MODELS[0] };
 
-  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
-    if (attempt > 0) await sleep(RETRY_DELAYS[attempt - 1]);
+  for (const model of MODELS) {
+    const remaining = deadline - Date.now();
+    if (remaining < 3000) {
+      console.warn("[ai] 예산 소진, 중단");
+      break;
+    }
 
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), ATTEMPT_TIMEOUT);
+    const timer = setTimeout(() => ac.abort(), Math.min(ATTEMPT_TIMEOUT, remaining));
 
     try {
       const res = await fetch(`${API_ROOT}/models/${model}:generateContent`, {
@@ -51,32 +57,18 @@ async function tryModel(model, body) {
       if (res.ok) return { ok: true, res, model };
 
       const text = await res.text();
-      last = { status: res.status, text };
-      console.warn(`[ai] ${model} 시도 ${attempt + 1}: ${res.status}`);
+      last = { ok: false, status: res.status, text, model };
+      console.warn(`[ai] ${model}: ${res.status}`);
 
+      // 요청 자체가 잘못됐다면 다른 모델도 똑같이 실패한다
       if (!RETRY_STATUS.has(res.status)) break;
     } catch (err) {
-      last = { status: 0, text: err.name === "AbortError" ? "timeout" : String(err.message) };
-      console.warn(`[ai] ${model} 시도 ${attempt + 1} 예외:`, last.text);
+      const timedOut = err.name === "AbortError";
+      last = { ok: false, status: 0, text: timedOut ? "timeout" : String(err.message), model };
+      console.warn(`[ai] ${model} 예외:`, last.text);
     } finally {
       clearTimeout(timer);
     }
-  }
-
-  return { ok: false, model, ...last };
-}
-
-async function callGemini(body) {
-  let last = { ok: false, status: 0, text: "", model: MODEL };
-
-  for (const model of MODELS) {
-    const result = await tryModel(model, body);
-    if (result.ok) return result;
-
-    last = result;
-    // 모델 자체의 문제(잘못된 요청·권한)라면 다른 모델도 마찬가지다
-    if (!RETRY_STATUS.has(result.status)) break;
-    console.warn(`[ai] ${model} 포기, 다음 모델로`);
   }
 
   return last;
@@ -137,6 +129,12 @@ module.exports = async (req, res) => {
 
   // 배포된 함수가 어느 버전인지 확인용. 비밀값은 담지 않는다. 진단 끝나면 제거.
   if (payload.probe === true) {
+    // maxDuration이 실제로 몇 초까지 허용되는지 재보기 위한 경로
+    if (Number.isFinite(payload.sleep)) {
+      const ms = Math.min(Math.max(payload.sleep, 0), 28000);
+      await new Promise((r) => setTimeout(r, ms));
+      return res.status(200).json({ build: BUILD, slept: ms });
+    }
     if (payload.models !== true) {
       return res.status(200).json({ build: BUILD, model: MODEL });
     }
