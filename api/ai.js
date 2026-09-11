@@ -112,11 +112,25 @@ module.exports = async (req, res) => {
     if (!upstream.ok) {
       const detail = await upstream.text();
       console.error("[ai] gemini", upstream.status, detail.slice(0, 500));
-      // 상류 오류 내용을 그대로 내보내지 않는다. 키나 내부 정보가 섞일 수 있다.
+
       const msg = upstream.status === 429
         ? "요청이 많습니다. 잠시 후 다시 시도해 주세요."
         : "생성에 실패했습니다. 잠시 후 다시 시도해 주세요.";
-      return res.status(502).json({ error: msg });
+
+      // 진단용. Google이 돌려주는 error.message에는 키가 포함되지 않는다
+      // (키는 헤더로만 보내고 응답에 echo되지 않는다).
+      // 원인 확인 후 제거할 것.
+      let reason = "";
+      try {
+        reason = JSON.parse(detail)?.error?.message || "";
+      } catch {
+        reason = detail.slice(0, 200);
+      }
+
+      return res.status(502).json({
+        error: msg,
+        debug: `gemini ${upstream.status}: ${reason}`.slice(0, 300),
+      });
     }
 
     const data = await upstream.json();

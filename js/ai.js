@@ -143,7 +143,10 @@ if (aiForm) {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `요청 실패 (${res.status})`);
+      if (!res.ok) {
+        if (data.debug) console.error("[ai] 상세:", data.debug);
+        throw new Error(data.debug ? `${data.error} (${data.debug})` : data.error || `요청 실패 (${res.status})`);
+      }
 
       render(data);
       setStatus("완성됐습니다. 마음에 드는 상품명을 복사해서 쓰세요.", "ok");
