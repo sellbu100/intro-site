@@ -12,6 +12,7 @@
 
 const { guard } = require("./_turnstile");
 
+const BUILD = "diag-2";
 const MODEL = "gemini-2.5-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
@@ -67,6 +68,11 @@ module.exports = async (req, res) => {
   }
 
   const payload = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+
+  // 배포된 함수가 어느 버전인지 확인용. 비밀값은 담지 않는다. 진단 끝나면 제거.
+  if (payload.probe === true) {
+    return res.status(200).json({ build: BUILD, model: MODEL });
+  }
 
   /* 캡차 ------------------------------------------------------------- */
   const blocked = await guard(req, payload.turnstileToken);
